@@ -1,0 +1,127 @@
+# Docker Compose para o ecossistema *arr
+# Contém:
+# - QBitTorrent, como cliente de download torrent.
+# - Prowlarr, como navegador/centralizador de indexadores torrent.
+# - Radarr, como monitor de filmes.
+# - Sonarr, como monitor de séries.
+# - Plex, como servidor de mídias.
+# - Overseerr, como interface para requisitar mídias.
+
+# Importante: Ao alterar qualquer mapeamento de volume de qualquer serviço, verificar os demais serviços pois a inter comunicação dos serviços acontece via esses diretórios:
+# - Radarr e Sonarr monitoram os diretório de downloads e filmes e séries do QBitTorrent
+#   - /DATA/Media/SeriesDownloads
+#   - /DATA/Media/FilmesDownloads
+# - Plex monitora os dirétorios de filmes e séries do Radarr e Sonarr
+#   - /DATA/Media/Filmes
+#   - /DATA/Media/Series
+
+version: "3"
+services:
+    qbittorrent:
+        image: linuxserver/qbittorrent
+        container_name: qbittorrent
+        ports:
+          - 8090:8090
+        environment:
+          - PUID=1024
+          - PGID=101
+          - TZ=America/Sao_Paulo
+          - UMASK_SET=022
+          - WEBUI_PORT=8090
+        volumes: # Alterar conforme necessidade
+          - /DATA/docker/qbittorrent/config:/config # Configurações do container
+          - /DATA/Media/Downloads:/downloads # Downloads em estado de seeding
+          - /DATA/Media/SeriesDownloads:/tvdownloads # Downloads de novas series que serão tratadas pelo Sonarr
+          - /DATA/Media/FilmesDownloads:/filmdownloads # Downloads de series que serão tratadas pelo Radarr
+        networks:
+          - midias  
+        restart: unless-stopped
+
+    prowlarr:
+        image: linuxserver/prowlarr:develop
+        container_name: prowlarr
+        ports:
+          - 9696:9696
+        environment:
+          - PUID=1024
+          - PGID=101
+          - TZ=America/Sao_Paulo
+        volumes: # Alterar conforme necessidade
+          - /DATA/docker/prowlarr:/config # Configurações do container
+        restart: unless-stopped
+        networks:
+          - midias  
+        depends_on:
+          - qbittorrent
+            
+    sonarr:
+        image: linuxserver/sonarr:latest
+        container_name: sonarr
+        ports:
+          - 8989:8989
+        environment:
+          - PUID=1024
+          - PGID=101
+          - TZ=America/Sao_Paulo
+        volumes: # Alterar conforme necessidade
+          - /etc/localtime:/etc/localtime:ro
+          - /DATA/docker/sonarr/config:/config # Configurações do container
+          - /DATA/Media/Series:/tv # Series já tratadas
+          - /DATA/Media/SeriesDownloads:/downloads # Series recém vindas do qbittorrent
+        restart: unless-stopped
+        networks:
+          - midias  
+        depends_on:
+          - prowlarr
+          - qbittorrent
+
+    radarr:
+        image: linuxserver/radarr:latest
+        container_name: radarr
+        ports:
+          - 7878:7878
+        environment:
+          - PUID=1024
+          - PGID=101
+          - TZ=America/Sao_Paulo
+        volumes: # Alterar conforme necessidade
+          - /etc/localtime:/etc/localtime:ro
+          - /DATA/docker/radarr/config:/config # Configurações do container
+          - /DATA/Media/Filmes:/movies # Filmes já tratadas
+          - /DATA/Media/FilmesDownloads:/downloads # Series recém vindas do qbittorrent
+        restart: unless-stopped
+        networks:
+          - midias  
+        depends_on:
+          - prowlarr
+          - qbittorrent
+    
+    plex:
+      image: lscr.io/linuxserver/plex:latest
+      container_name: plex
+      ports:
+        - 32400:32400
+      networks:
+          - midias  
+      environment:
+        - PUID=1000
+        - PGID=1000
+        - TZ=America/Sao_Paulo
+        - VERSION=docker
+      volumes: # Alterar conforme necessidade
+        - /DATA/docker/plex:/config # Configurações do container
+        - /DATA/Media/Series:/tv # Series prontas para streaming, vindas do Sonarr
+        - /DATA/Media/Filmes:/movies # Filmes prontas para streaming, vindas do Radarr
+      restart: unless-stopped
+
+    overseerr:
+      image: sctx/overseerr:latest
+      container_name: overseerr
+      environment:
+        - LOG_LEVEL=debug
+        - TZ=America/Sao_Paulo
+      ports:
+        - 5055:5055
+      volumes: # Alterar conforme necessidade
+        - /DATA/docker/overseerr:/app/config
+      restart: unless-stopped
