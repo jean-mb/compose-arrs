@@ -16,6 +16,11 @@
 #   - /DATA/Media/Series
 
 version: "3"
+networks:
+  midias:
+    name: midias
+    ipam:
+      driver: default
 services:
     qbittorrent:
         image: linuxserver/qbittorrent
