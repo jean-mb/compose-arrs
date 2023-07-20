@@ -104,10 +104,7 @@ services:
     plex:
       image: lscr.io/linuxserver/plex:latest
       container_name: plex
-      ports:
-        - 32400:32400
-      networks:
-          - midias  
+      networks_mode: host
       environment:
         - PUID=1000
         - PGID=1000
